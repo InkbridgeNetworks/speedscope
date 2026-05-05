@@ -348,6 +348,10 @@ class CallgrindParser {
   private savedFileNames: {[id: string]: string} = {}
   private savedFunctionNames: {[id: string]: string} = {}
 
+  // Tracks the number of position fields per cost line (default 1 = "line" only).
+  // "positions: instr line" means 2 position fields; "positions: instr" means 1.
+  private numPositionFields: number = 1
+
   constructor(
     contents: TextFileContent,
     private importedFileName: string,
@@ -412,6 +416,16 @@ class CallgrindParser {
   private parseHeaderLine(line: string): boolean {
     const headerMatch = /^\s*(\w+):\s*(.*)+$/.exec(line)
     if (!headerMatch) return false
+
+    if (headerMatch[1] === 'positions') {
+      // "positions:" declares how many position columns appear before the cost
+      // values on each cost line. Each token is a position type: "line" or "instr".
+      // e.g. "positions: line"       => 1 position field  (default)
+      //      "positions: instr line" => 2 position fields
+      //      "positions: instr"      => 1 position field
+      this.numPositionFields = headerMatch[2].trim().split(/\s+/).length
+      return true
+    }
 
     if (headerMatch[1] !== 'events') {
       // We don't care about other headers. Ignore this line.
@@ -503,6 +517,30 @@ class CallgrindParser {
         break
       }
 
+      case 'jcnd':
+      case 'jump': {
+        // Jump specification lines (conditional and unconditional jumps).
+        // Each is followed by exactly one cost line describing the jump counts.
+        // We don't model jumps in the call graph, so we consume and discard
+        // the following cost line to keep the line counter in sync.
+        this.lineNum++
+        break
+      }
+
+      case 'jfi':
+      case 'jfl': {
+        // Jump target file — analogous to cfi/cfl but for jumps.
+        // We ignore jump targets, but still parse the name for compression table.
+        this.parseNameWithCompression(value, this.savedFileNames)
+        break
+      }
+
+      case 'jfn': {
+        // Jump target function — analogous to cfn but for jumps. Ignored.
+        this.parseNameWithCompression(value, this.savedFunctionNames)
+        break
+      }
+
       default: {
         console.log(`Ignoring assignment to unrecognized key "${line}" on line ${this.lineNum}`)
       }
@@ -548,8 +586,6 @@ class CallgrindParser {
   private prevCostLineNumbers: number[] = []
 
   private parseCostLine(line: string, costType: 'self' | 'child'): boolean {
-    // TODO(jlfwong): Allow hexadecimal encoding
-
     const parts = line.split(/\s+/)
     const nums: number[] = []
 
@@ -560,7 +596,7 @@ class CallgrindParser {
         return false
       }
 
-      if (part === '*' || part[0] === '-' || part[1] === '+') {
+      if (part === '*' || part[0] === '-' || part[0] === '+') {
         // This handles "Subposition compression"
         // See: https://valgrind.org/docs/manual/cl-format.html#cl-format.overview.compression2
         if (this.prevCostLineNumbers.length <= i) {
@@ -584,8 +620,13 @@ class CallgrindParser {
           }
           nums.push(prevCostForSubposition + offset)
         }
+      } else if (/^0x[0-9a-fA-F]+$/.test(part)) {
+        // Hexadecimal instruction address used as a position field.
+        // Parse it so subposition compression works on subsequent lines,
+        // but the value itself is only used as a position (not a cost).
+        nums.push(parseInt(part, 16))
       } else {
-        const asNum = parseInt(part)
+        const asNum = parseInt(part, 10)
         if (isNaN(asNum)) {
           return false
         }
@@ -597,8 +638,7 @@ class CallgrindParser {
       return false
     }
 
-    // TODO(jlfwong): Handle custom positions format w/ multiple parts
-    const numPositionFields = 1
+    const numPositionFields = this.numPositionFields
 
     // NOTE: We intentionally do not include the line number here because
     // callgrind uses the line number of the function invocation, not the
