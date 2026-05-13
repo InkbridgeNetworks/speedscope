@@ -319,6 +319,10 @@ class CallGraph {
     }
 
     if (rootNodes.size > 0) {
+      console.log(
+        `[callgrind] ${this.fileName} (${this.fieldName}): using option 1 root-finding` +
+          ` — ${rootNodes.size} natural root(s) found`,
+      )
       for (let rootNode of rootNodes) {
         visit(rootNode, this.totalWeights.get(rootNode)!)
       }
@@ -337,6 +341,14 @@ class CallGraph {
       }
       // Visit heaviest residual roots first so the flame graph is ordered.
       residuals.sort((a, b) => b[1] - a[1])
+      console.log(
+        `[callgrind] ${this.fileName} (${this.fieldName}): using option 2 residual-weight` +
+          ` root-finding — no natural roots, ${residuals.length} residual root(s):` +
+          ` [${residuals
+            .slice(0, 3)
+            .map(([f, w]) => `${f.name}=${w}`)
+            .join(', ')}${residuals.length > 3 ? ', …' : ''}]`,
+      )
       for (const [frame, residual] of residuals) {
         visit(frame, residual)
       }
