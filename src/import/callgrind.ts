@@ -303,7 +303,12 @@ class CallGraph {
     // a min-heap and then deletes and re-inserts nodes as their weights change,
     // but reasoning about the performance of that is a big pain in the butt.
     //
-    // Despite not always being correct, I'm opting for option (1).
+    // Despite not always being correct, I'm opting for option (1), with a
+    // fallback to option (2) for event-loop programs (e.g. FreeRADIUS) where
+    // every frame is reachable from every other frame via coroutine callbacks,
+    // leaving no natural roots. In that case we compute residual weights:
+    // frames whose total weight exceeds the sum of all incoming call weights
+    // are acting as entry points from outside the recorded call graph.
 
     const rootNodes = new Set<Frame>(this.frameSet)
 
@@ -313,8 +318,28 @@ class CallGraph {
       }
     }
 
-    for (let rootNode of rootNodes) {
-      visit(rootNode, this.totalWeights.get(rootNode)!)
+    if (rootNodes.size > 0) {
+      for (let rootNode of rootNodes) {
+        visit(rootNode, this.totalWeights.get(rootNode)!)
+      }
+    } else {
+      // Compute incoming call weights to find residual-weight entry points.
+      const incomingWeights = new Map<Frame, number>()
+      for (const childMap of this.childrenTotalWeights.values()) {
+        for (const [child, weight] of childMap) {
+          incomingWeights.set(child, (incomingWeights.get(child) || 0) + weight)
+        }
+      }
+      const residuals: Array<[Frame, number]> = []
+      for (const [frame, totalWeight] of this.totalWeights) {
+        const residual = totalWeight - (incomingWeights.get(frame) || 0)
+        if (residual > 0) residuals.push([frame, residual])
+      }
+      // Visit heaviest residual roots first so the flame graph is ordered.
+      residuals.sort((a, b) => b[1] - a[1])
+      for (const [frame, residual] of residuals) {
+        visit(frame, residual)
+      }
     }
 
     return profile.build()
@@ -334,8 +359,8 @@ class CallGraph {
 // So, instead, I'm not going to bother with a formal parse. Since there are no
 // real recursive structures in this file format, that should be okay.
 class CallgrindParser {
-  private lines: string[]
-  private lineNum: number
+  private lineIterator: Iterator<string>
+  private lineNum: number = 0
 
   private callGraphs: CallGraph[] | null = null
   private eventsLine: string | null = null
@@ -356,13 +381,27 @@ class CallgrindParser {
     contents: TextFileContent,
     private importedFileName: string,
   ) {
-    this.lines = [...contents.splitLines()]
-    this.lineNum = 0
+    this.lineIterator = contents.splitLines()[Symbol.iterator]()
   }
 
-  parse(): ProfileGroup | null {
-    while (this.lineNum < this.lines.length) {
-      const line = this.lines[this.lineNum++]
+  private consumeLine(): string | null {
+    const result = this.lineIterator.next()
+    if (result.done) return null
+    this.lineNum++
+    return result.value
+  }
+
+  // Lines parsed per chunk before yielding to the event loop.
+  private static readonly YIELD_EVERY = 10_000
+
+  async parse(): Promise<ProfileGroup | null> {
+    let linesUntilYield = CallgrindParser.YIELD_EVERY
+    let line: string | null
+    while ((line = this.consumeLine()) !== null) {
+      if (--linesUntilYield <= 0) {
+        await new Promise<void>(resolve => setTimeout(resolve, 0))
+        linesUntilYield = CallgrindParser.YIELD_EVERY
+      }
 
       if (/^\s*#/.exec(line)) {
         // Line is a comment. Ignore it.
@@ -497,7 +536,8 @@ class CallgrindParser {
         // made. Accounting for the number of calls might be unhelpful anyway,
         // since it'll just be copying the exact same frame over-and-over again,
         // but that might be better than ignoring it.
-        this.parseCostLine(this.lines[this.lineNum++], 'child')
+        const callsLine = this.consumeLine()
+        if (callsLine !== null) this.parseCostLine(callsLine, 'child')
 
         // This isn't specified anywhere in the spec, but empirically the and
         // "cfn" scope should only persist for a single "call".
@@ -523,7 +563,7 @@ class CallgrindParser {
         // Each is followed by exactly one cost line describing the jump counts.
         // We don't model jumps in the call graph, so we consume and discard
         // the following cost line to keep the line counter in sync.
-        this.lineNum++
+        this.consumeLine()
         break
       }
 
@@ -586,7 +626,11 @@ class CallgrindParser {
   private prevCostLineNumbers: number[] = []
 
   private parseCostLine(line: string, costType: 'self' | 'child'): boolean {
-    const parts = line.split(/\s+/)
+    // trimEnd() strips trailing whitespace before splitting. Without this,
+    // callgrind lines with trailing spaces produce a spurious empty token
+    // in the split result (e.g. "* * " -> ["*","*",""]), causing valid
+    // subposition-compressed cost lines to be incorrectly rejected.
+    const parts = line.replace(/\s+$/, '').split(/\s+/)
     const nums: number[] = []
 
     for (let i = 0; i < parts.length; i++) {
@@ -672,6 +716,6 @@ class CallgrindParser {
 export function importFromCallgrind(
   contents: TextFileContent,
   importedFileName: string,
-): ProfileGroup | null {
+): Promise<ProfileGroup | null> {
   return new CallgrindParser(contents, importedFileName).parse()
 }
