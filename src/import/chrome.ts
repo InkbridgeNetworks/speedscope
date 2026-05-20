@@ -184,9 +184,10 @@ export function importFromChromeTimeline(events: TimelineEvent[], fileName: stri
   }
 }
 
-const callFrameToFrameInfo = new Map<CPUProfileCallFrame, FrameInfo>()
-function frameInfoForCallFrame(callFrame: CPUProfileCallFrame) {
-  return getOrInsert(callFrameToFrameInfo, callFrame, callFrame => {
+function makeFrameInfoForCallFrame() {
+  const callFrameToFrameInfo = new Map<CPUProfileCallFrame, FrameInfo>()
+  return function frameInfoForCallFrame(callFrame: CPUProfileCallFrame) {
+    return getOrInsert(callFrameToFrameInfo, callFrame, callFrame => {
     const file = callFrame.url
 
     // In Chrome profiles, line numbers & column numbers are both 0-indexed.
@@ -211,6 +212,7 @@ function frameInfoForCallFrame(callFrame: CPUProfileCallFrame) {
       col,
     }
   })
+  }
 }
 
 function shouldIgnoreFunction(callFrame: CPUProfileCallFrame) {
@@ -229,6 +231,7 @@ function shouldPlaceOnTopOfPreviousStack(functionName: string) {
 }
 
 export function importFromChromeCPUProfile(chromeProfile: CPUProfile): Profile {
+  const frameInfoForCallFrame = makeFrameInfoForCallFrame()
   const profile = new CallTreeProfileBuilder(chromeProfile.endTime - chromeProfile.startTime)
 
   const nodeById = new Map<number, CPUProfileNode>()
