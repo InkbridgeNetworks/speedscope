@@ -131,7 +131,7 @@ class CallGraph {
     this.addToTotalWeight(parent, weight)
   }
 
-  toProfile(): Profile {
+  toProfile({useResidualWeight = false}: {useResidualWeight?: boolean} = {}): Profile {
     const profile = new CallTreeProfileBuilder()
 
     let unitMultiplier = 1
@@ -153,11 +153,24 @@ class CallGraph {
 
     const currentStack = new Set<Frame>()
 
+    // Initialized to 0 here; set to the sum of root weights before the first
+    // visit() call so the pruning threshold is proportional to the total
+    // attributed weight for this event, not just the heaviest single node.
+    // Using max-single-node caused events with uniform weight distributions
+    // (e.g. Dr, Dw) to produce orders-of-magnitude more call tree nodes than
+    // events with one dominant node (e.g. Ir), leading to OOM on large files.
     let maxWeight = 0
-    for (let [_, totalWeight] of this.totalWeights) {
-      maxWeight = Math.max(maxWeight, totalWeight)
-    }
 
+    // Tracks frames that have already been fully expanded in the call tree.
+    // A frame's first visit expands its full subtree. Subsequent visits from
+    // different call paths collapse the frame to a leaf (all weight as
+    // self-time) rather than re-expanding its subtree. This keeps the node
+    // count O(frames + paths) instead of O(paths × subtree_depth), preventing
+    // exponential blowup in highly-connected call graphs (e.g. event loops).
+    const visitedGlobally = new Set<Frame>()
+
+    let visitCount = 0
+    let cycleDetected = false
     const visit = (frame: Frame, subtreeTotalWeight: number) => {
       if (currentStack.has(frame)) {
         // Call-graphs are allowed to have cycles. Call-trees are not. In case
@@ -165,6 +178,7 @@ class CallGraph {
         // more than once in a call stack. The result will be that the time
         // spent in the recursive call will instead be attributed as self time
         // in the parent.
+        cycleDetected = true
         return
       }
 
@@ -217,6 +231,19 @@ class CallGraph {
       if (totalWeightForFrameInCallgraph === 0) {
         return
       }
+
+      visitCount++
+
+      // If this frame has already been fully expanded from an earlier call
+      // path, show it as a leaf here (weight becomes self-time) rather than
+      // re-expanding its entire subtree a second time.
+      if (visitedGlobally.has(frame)) {
+        profile.enterFrame(frame, Math.round(totalCumulative * unitMultiplier))
+        totalCumulative += subtreeTotalWeight
+        profile.leaveFrame(frame, Math.round(totalCumulative * unitMultiplier))
+        return
+      }
+      visitedGlobally.add(frame)
 
       let selfWeightForNodeInCallTree = subtreeTotalWeight
 
@@ -319,6 +346,9 @@ class CallGraph {
     }
 
     if (rootNodes.size > 0) {
+      for (let rootNode of rootNodes) {
+        maxWeight += this.totalWeights.get(rootNode)!
+      }
       console.log(
         `[callgrind] ${this.fileName} (${this.fieldName}): using option 1 root-finding` +
           ` — ${rootNodes.size} natural root(s) found`,
@@ -326,7 +356,7 @@ class CallGraph {
       for (let rootNode of rootNodes) {
         visit(rootNode, this.totalWeights.get(rootNode)!)
       }
-    } else {
+    } else if (useResidualWeight) {
       // Compute incoming call weights to find residual-weight entry points.
       const incomingWeights = new Map<Frame, number>()
       for (const childMap of this.childrenTotalWeights.values()) {
@@ -341,6 +371,9 @@ class CallGraph {
       }
       // Visit heaviest residual roots first so the flame graph is ordered.
       residuals.sort((a, b) => b[1] - a[1])
+      for (const [, residual] of residuals) {
+        maxWeight += residual
+      }
       console.log(
         `[callgrind] ${this.fileName} (${this.fieldName}): using option 2 residual-weight` +
           ` root-finding — no natural roots, ${residuals.length} residual root(s):` +
@@ -354,6 +387,14 @@ class CallGraph {
       }
     }
 
+    if (cycleDetected) {
+      console.warn(
+        `[callgrind] ${this.fileName} (${this.fieldName}): cycle(s) detected in call graph — recursive call weights are attributed as self time in the caller`,
+      )
+    }
+    console.log(
+      `[callgrind] ${this.fileName} (${this.fieldName}): visit() called ${visitCount} times`,
+    )
     return profile.build()
   }
 }
@@ -446,7 +487,7 @@ class CallgrindParser {
     return {
       name: this.importedFileName,
       indexToView: 0,
-      profiles: this.callGraphs.map(cg => cg.toProfile()),
+      profiles: this.callGraphs.map(cg => cg.toProfile({useResidualWeight: true})),
     }
   }
 
