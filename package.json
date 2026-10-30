@@ -16,7 +16,8 @@
     "coverage": "npm run jest -- --coverage",
     "typecheck": "tsc --noEmit",
     "test": "./scripts/ci.sh",
-    "serve": "tsx scripts/dev-server.ts"
+    "serve": "tsx scripts/dev-server.ts",
+    "build:inkscope": "esbuild src/inkscope/index.ts --bundle --minify --format=iife --global-name=SpeedscopeImport --target=es2020 --outfile=dist/inkscope/speedscope-import.js"
   },
   "files": [
     "bin/cli.mjs",

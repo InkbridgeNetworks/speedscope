@@ -720,8 +720,12 @@ class CallgrindParser {
       )
     }
     for (let i = 0; i < this.callGraphs.length; i++) {
+      // A cost line may end before the last event: callgrind leaves trailing
+      // zero columns off, so a missing column is a zero, as for the calls
+      // line below. Without the fallback every event after the shortest line's
+      // last column accumulates NaN.
       if (costType === 'self') {
-        this.callGraphs[i].addSelfWeight(this.frameInfo(), nums[numPositionFields + i])
+        this.callGraphs[i].addSelfWeight(this.frameInfo(), nums[numPositionFields + i] || 0)
       } else if (costType === 'child') {
         this.callGraphs[i].addChildWithTotalWeight(
           this.frameInfo(),
