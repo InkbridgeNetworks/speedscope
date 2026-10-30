@@ -437,6 +437,8 @@ export class Application extends StatelessComponent<ApplicationProps> {
         return
       }
       this.loadProfile(async () => {
+        // a callgrind file gets the hash's derived event as one more profile
+        ;(await importModule).setCallgrindDerivedEvent(this.props.hashParams.derivedEvent || null)
         const response: Response = await fetch(profileURL)
         let filename = new URL(profileURL, window.location.href).pathname
         if (filename.includes('/')) {

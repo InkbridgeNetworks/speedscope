@@ -89,6 +89,15 @@ import {CallTreeProfileBuilder, Frame, FrameInfo, Profile, ProfileGroup} from '.
 import {getOrElse, getOrInsert, KeyedSet} from '../lib/utils'
 import {ByteFormatter, TimeFormatter} from '../lib/value-formatters'
 import {TextFileContent} from './utils'
+import {DerivedEvent} from '../lib/hash-params'
+
+// The derived event the next callgrind import adds as one more profile, a
+// weighted sum of the file's events (see DerivedEvent): set for the page
+// from the hash parameter before a profile loads; null adds nothing.
+let derivedEvent: DerivedEvent | null = null
+export function setCallgrindDerivedEvent(spec: DerivedEvent | null) {
+  derivedEvent = spec
+}
 
 class CallGraph {
   private frameSet = new KeyedSet<Frame>()
@@ -403,6 +412,11 @@ class CallgrindParser {
   // "positions: instr line" means 2 position fields; "positions: instr" means 1.
   private numPositionFields: number = 1
 
+  // The derived event's call graph and its weight per events column, when
+  // the file has any of the events the derived event names.
+  private derivedGraph: CallGraph | null = null
+  private derivedWeights: number[] = []
+
   constructor(
     contents: TextFileContent,
     private importedFileName: string,
@@ -457,10 +471,13 @@ class CallgrindParser {
     if (!this.callGraphs) {
       return null
     }
+    const profiles = this.callGraphs.map(cg => cg.toProfile())
+    // the derived event last, and the one shown first
+    if (this.derivedGraph) profiles.push(this.derivedGraph.toProfile())
     return {
       name: this.importedFileName,
-      indexToView: 0,
-      profiles: this.callGraphs.map(cg => cg.toProfile()),
+      indexToView: this.derivedGraph ? profiles.length - 1 : 0,
+      profiles,
     }
   }
 
@@ -509,6 +526,13 @@ class CallgrindParser {
     this.callGraphs = fields.map(fieldName => {
       return new CallGraph(this.importedFileName, fieldName)
     })
+
+    if (derivedEvent) {
+      this.derivedWeights = fields.map(f => derivedEvent!.weights[f] || 0)
+      if (this.derivedWeights.some(w => w !== 0)) {
+        this.derivedGraph = new CallGraph(this.importedFileName, derivedEvent.name)
+      }
+    }
 
     return true
   }
@@ -732,6 +756,17 @@ class CallgrindParser {
           this.calleeFrameInfo(),
           nums[numPositionFields + i] || 0,
         )
+      }
+    }
+    if (this.derivedGraph) {
+      let cost = 0
+      for (let i = 0; i < this.derivedWeights.length; i++) {
+        cost += this.derivedWeights[i] * (nums[numPositionFields + i] || 0)
+      }
+      if (costType === 'self') {
+        this.derivedGraph.addSelfWeight(this.frameInfo(), cost)
+      } else {
+        this.derivedGraph.addChildWithTotalWeight(this.frameInfo(), this.calleeFrameInfo(), cost)
       }
     }
 

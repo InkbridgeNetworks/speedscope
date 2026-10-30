@@ -5,6 +5,32 @@ export interface HashParams {
   title?: string
   localProfilePath?: string
   viewMode?: ViewMode
+  derivedEvent?: DerivedEvent
+}
+
+// A derived event for callgrind files: one more profile whose cost is a
+// weighted sum of the file's events, shown first. From the hash parameter
+// `derived=<name>:<event>=<weight>,<event>=<weight>,...`, e.g.
+// `derived=CEst:Ir=1,I1mr=10,D1mr=10,D1mw=10,ILmr=100,DLmr=100,DLmw=100,Bcm=10,Bim=10`.
+export interface DerivedEvent {
+  name: string
+  weights: {[event: string]: number}
+}
+
+export function parseDerivedEvent(value: string): DerivedEvent | null {
+  const colon = value.indexOf(':')
+  if (colon <= 0) return null
+  const name = value.slice(0, colon)
+  const weights: {[event: string]: number} = {}
+  let any = false
+  for (const term of value.slice(colon + 1).split(',')) {
+    const [event, w] = term.split('=')
+    const weight = parseFloat(w)
+    if (!event || !isFinite(weight)) continue
+    weights[event] = weight
+    any = true
+  }
+  return any ? {name, weights} : null
 }
 
 function getViewMode(value: string): ViewMode | null {
@@ -36,6 +62,13 @@ export function getHashParams(hashContents = window.location.hash): HashParams {
         result.title = value
       } else if (key === 'localProfilePath') {
         result.localProfilePath = value
+      } else if (key === 'derived') {
+        const derived = parseDerivedEvent(value)
+        if (derived) {
+          result.derivedEvent = derived
+        } else {
+          console.error(`Ignoring invalid derived event specifier: ${value}`)
+        }
       } else if (key === 'view') {
         const mode = getViewMode(value)
         if (mode !== null) {
