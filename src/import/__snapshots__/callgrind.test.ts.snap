@@ -130,6 +130,72 @@ exports[`importFromCallgrind cyclic callgraph: indexToView 1`] = `0`;
 
 exports[`importFromCallgrind cyclic callgraph: profileGroup.name 1`] = `"callgrind.cyclic-callgraph.log"`;
 
+exports[`importFromCallgrind diamond callgraph 1`] = `
+{
+  "frames": [
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:A",
+      "line": undefined,
+      "name": "A",
+      "selfWeight": 1,
+      "totalWeight": 41,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:B",
+      "line": undefined,
+      "name": "B",
+      "selfWeight": 1,
+      "totalWeight": 20,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:D",
+      "line": undefined,
+      "name": "D",
+      "selfWeight": 8,
+      "totalWeight": 38,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:E",
+      "line": undefined,
+      "name": "E",
+      "selfWeight": 30,
+      "totalWeight": 30,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:C",
+      "line": undefined,
+      "name": "C",
+      "selfWeight": 1,
+      "totalWeight": 20,
+    },
+  ],
+  "name": "callgrind.diamond.log -- Ir",
+  "stacks": [
+    "A;B;D;E 15",
+    "A;B;D 4",
+    "A;B 1",
+    "A;C;D;E 15",
+    "A;C;D 4",
+    "A;C 1",
+    "A 1",
+  ],
+}
+`;
+
+exports[`importFromCallgrind diamond callgraph: indexToView 1`] = `0`;
+
+exports[`importFromCallgrind diamond callgraph: profileGroup.name 1`] = `"callgrind.diamond.log"`;
+
 exports[`importFromCallgrind instr line subposition compression 1`] = `
 {
   "frames": [

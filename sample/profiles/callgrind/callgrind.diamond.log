@@ -1,0 +1,37 @@
+# callgrind format
+events: Ir
+
+# A calls B and C, both of which call D, which calls E. D is reached by two
+# call paths and must be expanded under both, with E split between them in
+# proportion to the inclusive cost of each call to D (19 and 19).
+
+fl=file.c
+fn=A
+1 1
+cfn=B
+calls=1 1
+1 20
+cfn=C
+calls=1 1
+1 20
+
+fn=B
+1 1
+cfn=D
+calls=1 1
+1 19
+
+fn=C
+1 1
+cfn=D
+calls=1 1
+1 19
+
+fn=D
+1 8
+cfn=E
+calls=2 1
+1 30
+
+fn=E
+1 30

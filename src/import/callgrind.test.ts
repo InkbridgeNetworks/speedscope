@@ -35,3 +35,7 @@ test('importFromCallgrind instr line subposition compression', async () => {
 test('importFromCallgrind cyclic callgraph', async () => {
   await checkProfileSnapshot('./sample/profiles/callgrind/callgrind.cyclic-callgraph.log')
 })
+
+test('importFromCallgrind diamond callgraph', async () => {
+  await checkProfileSnapshot('./sample/profiles/callgrind/callgrind.diamond.log')
+})
