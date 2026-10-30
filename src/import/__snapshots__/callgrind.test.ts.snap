@@ -196,6 +196,158 @@ exports[`importFromCallgrind diamond callgraph: indexToView 1`] = `0`;
 
 exports[`importFromCallgrind diamond callgraph: profileGroup.name 1`] = `"callgrind.diamond.log"`;
 
+exports[`importFromCallgrind expansion budget 1`] = `
+{
+  "frames": [
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:A",
+      "line": undefined,
+      "name": "A",
+      "selfWeight": 0,
+      "totalWeight": 9100,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L1",
+      "line": undefined,
+      "name": "L1",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:D",
+      "line": undefined,
+      "name": "D",
+      "selfWeight": 99,
+      "totalWeight": 9090,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:E",
+      "line": undefined,
+      "name": "E",
+      "selfWeight": 8991,
+      "totalWeight": 8991,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L2",
+      "line": undefined,
+      "name": "L2",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L3",
+      "line": undefined,
+      "name": "L3",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L4",
+      "line": undefined,
+      "name": "L4",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L5",
+      "line": undefined,
+      "name": "L5",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L6",
+      "line": undefined,
+      "name": "L6",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L7",
+      "line": undefined,
+      "name": "L7",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L8",
+      "line": undefined,
+      "name": "L8",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:L9",
+      "line": undefined,
+      "name": "L9",
+      "selfWeight": 1,
+      "totalWeight": 11,
+    },
+    Frame {
+      "col": undefined,
+      "file": "file.c",
+      "key": "file.c:HEAVY",
+      "line": undefined,
+      "name": "HEAVY",
+      "selfWeight": 1,
+      "totalWeight": 9001,
+    },
+  ],
+  "name": "callgrind.expansion-budget.log -- Ir",
+  "stacks": [
+    "A;L1;D;E 10",
+    "A;L1 1",
+    "A;L2;D;E 10",
+    "A;L2 1",
+    "A;L3;D;E 10",
+    "A;L3 1",
+    "A;L4;D;E 10",
+    "A;L4 1",
+    "A;L5;D;E 10",
+    "A;L5 1",
+    "A;L6;D;E 10",
+    "A;L6 1",
+    "A;L7;D;E 10",
+    "A;L7 1",
+    "A;L8;D;E 10",
+    "A;L8 1",
+    "A;L9;D 10",
+    "A;L9 1",
+    "A;HEAVY;D;E 8,911",
+    "A;HEAVY;D 89",
+    "A;HEAVY 1",
+  ],
+}
+`;
+
+exports[`importFromCallgrind expansion budget: indexToView 1`] = `0`;
+
+exports[`importFromCallgrind expansion budget: profileGroup.name 1`] = `"callgrind.expansion-budget.log"`;
+
 exports[`importFromCallgrind instr line subposition compression 1`] = `
 {
   "frames": [

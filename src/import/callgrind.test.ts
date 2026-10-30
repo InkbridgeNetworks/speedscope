@@ -39,3 +39,7 @@ test('importFromCallgrind cyclic callgraph', async () => {
 test('importFromCallgrind diamond callgraph', async () => {
   await checkProfileSnapshot('./sample/profiles/callgrind/callgrind.diamond.log')
 })
+
+test('importFromCallgrind expansion budget', async () => {
+  await checkProfileSnapshot('./sample/profiles/callgrind/callgrind.expansion-budget.log')
+})

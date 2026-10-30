@@ -108,6 +108,14 @@ export function setCallgrindDerivedEvent(spec: DerivedEvent | null) {
 // profile's weight in leaves whose children were hidden.
 const MAX_EXPANSIONS_PER_FRAME = 8
 
+// A visit carrying at least this fraction of the profile's total weight is
+// expanded even when its frame has used up MAX_EXPANSIONS_PER_FRAME. The
+// budget is spent in file order, so without this a heavy call path that
+// comes after several light ones would show as a leaf. Sibling subtrees
+// share their parent's weight, so at most 1 / ALWAYS_EXPAND_FRACTION visits
+// per depth qualify, which keeps the tree bounded.
+const ALWAYS_EXPAND_FRACTION = 0.01
+
 class CallGraph {
   private frameSet = new KeyedSet<Frame>()
   private totalWeights = new Map<Frame, number>()
@@ -242,9 +250,13 @@ class CallGraph {
 
       // A frame already expanded MAX_EXPANSIONS_PER_FRAME times from earlier
       // call paths shows as a leaf here (its weight becomes self time)
-      // rather than expanding its subtree once more.
+      // rather than expanding its subtree once more, unless this visit is
+      // heavy enough to be exempt (see ALWAYS_EXPAND_FRACTION).
       const expanded = expansions.get(frame) || 0
-      if (expanded >= MAX_EXPANSIONS_PER_FRAME) {
+      if (
+        expanded >= MAX_EXPANSIONS_PER_FRAME &&
+        subtreeTotalWeight < ALWAYS_EXPAND_FRACTION * maxWeight
+      ) {
         profile.enterFrame(frame, Math.round(totalCumulative * unitMultiplier))
         totalCumulative += subtreeTotalWeight
         profile.leaveFrame(frame, Math.round(totalCumulative * unitMultiplier))
