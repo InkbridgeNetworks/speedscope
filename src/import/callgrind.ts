@@ -99,19 +99,22 @@ export function setCallgrindDerivedEvent(spec: DerivedEvent | null) {
   derivedEvent = spec
 }
 
-// How many times one frame may be fully expanded across the call tree. A
-// function reached by several call paths gets its subtree on each of them
-// up to this many; past it, a visit collapses to a leaf carrying the whole
-// subtree weight as self time, which keeps a highly connected graph from
-// expanding without bound. On FreeRADIUS callgrind output 8 gives the same
-// tree as unlimited expansion, while 1 left about three quarters of the
-// profile's weight in leaves whose children were hidden.
+// Every visit is fully expanded until the call tree holds this many nodes.
+// Real profiles stay far below it (FreeRADIUS callgrind output builds a few
+// thousand), so they get the complete tree. Only a highly connected graph,
+// where full expansion can run to millions of nodes, reaches it and falls
+// back to MAX_EXPANSIONS_PER_FRAME and ALWAYS_EXPAND_FRACTION.
+const FULL_EXPANSION_NODE_BUDGET = 100000
+
+// Once the call tree holds FULL_EXPANSION_NODE_BUDGET nodes, a frame that
+// has been fully expanded this many times shows as a leaf on further call
+// paths, carrying the whole subtree weight as self time.
 const MAX_EXPANSIONS_PER_FRAME = 8
 
 // A visit carrying at least this fraction of the profile's total weight is
-// expanded even when its frame has used up MAX_EXPANSIONS_PER_FRAME. The
-// budget is spent in file order, so without this a heavy call path that
-// comes after several light ones would show as a leaf. Sibling subtrees
+// expanded even when its frame has used up MAX_EXPANSIONS_PER_FRAME. Those
+// expansions are spent in file order, so without this a heavy call path
+// that comes after several light ones would show as a leaf. Sibling subtrees
 // share their parent's weight, so at most 1 / ALWAYS_EXPAND_FRACTION visits
 // per depth qualify, which keeps the tree bounded.
 const ALWAYS_EXPAND_FRACTION = 0.01
@@ -186,6 +189,9 @@ class CallGraph {
     // MAX_EXPANSIONS_PER_FRAME).
     const expansions = new Map<Frame, number>()
 
+    // Nodes added to the call tree so far (see FULL_EXPANSION_NODE_BUDGET).
+    let nodeCount = 0
+
     let cycleDetected = false
     const visit = (frame: Frame, subtreeTotalWeight: number) => {
       if (currentStack.has(frame)) {
@@ -248,12 +254,15 @@ class CallGraph {
         return
       }
 
-      // A frame already expanded MAX_EXPANSIONS_PER_FRAME times from earlier
-      // call paths shows as a leaf here (its weight becomes self time)
-      // rather than expanding its subtree once more, unless this visit is
-      // heavy enough to be exempt (see ALWAYS_EXPAND_FRACTION).
+      // Once the tree is over FULL_EXPANSION_NODE_BUDGET, a frame already
+      // expanded MAX_EXPANSIONS_PER_FRAME times from earlier call paths shows
+      // as a leaf here (its weight becomes self time) rather than expanding
+      // its subtree once more, unless this visit is heavy enough to be exempt
+      // (see ALWAYS_EXPAND_FRACTION).
+      nodeCount++
       const expanded = expansions.get(frame) || 0
       if (
+        nodeCount > FULL_EXPANSION_NODE_BUDGET &&
         expanded >= MAX_EXPANSIONS_PER_FRAME &&
         subtreeTotalWeight < ALWAYS_EXPAND_FRACTION * maxWeight
       ) {
