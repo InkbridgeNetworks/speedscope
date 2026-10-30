@@ -99,6 +99,15 @@ export function setCallgrindDerivedEvent(spec: DerivedEvent | null) {
   derivedEvent = spec
 }
 
+// How many times one frame may be fully expanded across the call tree. A
+// function reached by several call paths gets its subtree on each of them
+// up to this many; past it, a visit collapses to a leaf carrying the whole
+// subtree weight as self time, which keeps a highly connected graph from
+// expanding without bound. On FreeRADIUS callgrind output 8 gives the same
+// tree as unlimited expansion, while 1 left about three quarters of the
+// profile's weight in leaves whose children were hidden.
+const MAX_EXPANSIONS_PER_FRAME = 8
+
 class CallGraph {
   private frameSet = new KeyedSet<Frame>()
   private totalWeights = new Map<Frame, number>()
@@ -165,8 +174,9 @@ class CallGraph {
     // Sum of root weights; used as the pruning threshold in visit().
     let maxWeight = 0
 
-    // Tracks fully-expanded frames; subsequent visits collapse to a leaf to avoid exponential blowup in highly-connected graphs.
-    const visitedGlobally = new Set<Frame>()
+    // How often each frame has been fully expanded so far (see
+    // MAX_EXPANSIONS_PER_FRAME).
+    const expansions = new Map<Frame, number>()
 
     let cycleDetected = false
     const visit = (frame: Frame, subtreeTotalWeight: number) => {
@@ -230,16 +240,17 @@ class CallGraph {
         return
       }
 
-      // If this frame has already been fully expanded from an earlier call
-      // path, show it as a leaf here (weight becomes self-time) rather than
-      // re-expanding its entire subtree a second time.
-      if (visitedGlobally.has(frame)) {
+      // A frame already expanded MAX_EXPANSIONS_PER_FRAME times from earlier
+      // call paths shows as a leaf here (its weight becomes self time)
+      // rather than expanding its subtree once more.
+      const expanded = expansions.get(frame) || 0
+      if (expanded >= MAX_EXPANSIONS_PER_FRAME) {
         profile.enterFrame(frame, Math.round(totalCumulative * unitMultiplier))
         totalCumulative += subtreeTotalWeight
         profile.leaveFrame(frame, Math.round(totalCumulative * unitMultiplier))
         return
       }
-      visitedGlobally.add(frame)
+      expansions.set(frame, expanded + 1)
 
       let selfWeightForNodeInCallTree = subtreeTotalWeight
 
